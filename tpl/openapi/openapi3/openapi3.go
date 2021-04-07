@@ -15,6 +15,8 @@ package openapi3
 
 import (
 	"io/ioutil"
+	"net/url"
+	"path/filepath"
 
 	gyaml "github.com/ghodss/yaml"
 
@@ -82,7 +84,18 @@ func (ns *Namespace) Unmarshal(r resource.UnmarshableResource) (*kopenapi3.Swagg
 			return nil, err
 		}
 
-		err = kopenapi3.NewSwaggerLoader().ResolveRefsIn(s, nil)
+		loader := kopenapi3.NewSwaggerLoader()
+		loader.IsExternalRefsAllowed = true
+		loader.ReadFromURIFunc = func(loader *kopenapi3.SwaggerLoader, url *url.URL) ([]byte, error) {
+			if url.Scheme != "" || url.Host != "" || url.RawQuery != "" {
+				return nil, errors.Errorf("unsupported URI: %q", url.String())
+			}
+
+			fullpath := filepath.Join(filepath.Dir(key), url.Path)
+			assetpath := ns.deps.SourceFilesystems.Assets.RealDirs(fullpath)[0]
+			return ioutil.ReadFile(assetpath)
+		}
+		err = loader.ResolveRefsIn(s, nil)
 
 		return s, err
 	})
